@@ -1,155 +1,107 @@
 import tkinter as tk
 from tkinter import messagebox
-import random
-
-class Cell:
-    def __init__(self, isOn, onCharacter=1, offCharacter=0, xLocation=0, yLocation=0):
-        self.isOn = isOn
-        self.on = onCharacter
-        self.off = offCharacter
-        self.x = xLocation
-        self.y = yLocation
-        self.next_state = isOn  # Initialize next_state with current state
-
-    def toggle(self):
-        self.isOn = not self.isOn
-
-    def getNeighbors(self, board):
-        neighbors = []
-        for dx in range(-1, 2):
-            for dy in range(-1, 2):
-                if dx == 0 and dy == 0:
-                    continue  # Exclude the cell itself
-                nx = self.x + dx
-                ny = self.y + dy
-
-                if board.looping:
-                    # Wrap around the edges using modulo operator for toroidal wrapping
-                    nx = nx % board.xSize
-                    ny = ny % board.ySize
-                    neighbors.append((nx, ny))
-                else:
-                    # Only include neighbors within the grid bounds
-                    if 0 <= nx < board.xSize and 0 <= ny < board.ySize:
-                        neighbors.append((nx, ny))
-        return neighbors
-
-    def numNeighborsOn(self, board):
-        onCount = 0
-        for (nx, ny) in self.getNeighbors(board):
-            if board.state[nx][ny].isOn:
-                onCount += 1
-        return onCount
-
-    def computeNextState(self, board):
-        numNeighbors = self.numNeighborsOn(board)
-        if numNeighbors == 3:
-            self.next_state = True
-        elif numNeighbors < 2 or numNeighbors > 3:
-            self.next_state = False
-        else:
-            self.next_state = self.isOn  # Remain in the current state
-
-    def applyNextState(self):
-        self.isOn = self.next_state
+import numpy as np
 
 class Board:
     def __init__(self, xSize=30, ySize=30, randomize=False):
         self.xSize = xSize
         self.ySize = ySize
-        self.state = []
-        self.looping = True  # Default to looping (toroidal wrapping)
-        self.generateNew(randomize)
+        self.looping = True
+        self.state = np.zeros((self.xSize, self.ySize), dtype=bool)
+        if randomize:
+            self.randomize()
 
-    def generateNew(self, randomize=False):
-        self.state = []
-        for x in range(self.xSize):
-            row = []
-            for y in range(self.ySize):
-                isOn = bool(random.randint(0, 1)) if randomize else False
-                row.append(Cell(isOn, 1, 0, x, y))
-            self.state.append(row)
-
-    def nextState(self):
-        # Phase 1: Compute next_state for all cells based on current state
-        for x in range(self.xSize):
-            for y in range(self.ySize):
-                self.state[x][y].computeNextState(self)
-
-        # Phase 2: Apply next_state to update isOn
-        for x in range(self.xSize):
-            for y in range(self.ySize):
-                self.state[x][y].applyNextState()
+    def randomize(self):
+        self.state = np.random.choice(a=[False, True], size=(self.xSize, self.ySize))
 
     def clear(self):
-        for row in self.state:
-            for cell in row:
-                cell.isOn = False
+        self.state[:] = False
 
-    def isEnded(self):
-        for x in range(self.xSize):
-            for y in range(self.ySize):
-                cell = self.state[x][y]
-                numNeighbors = cell.numNeighborsOn(self)
-                if (cell.isOn and not (numNeighbors == 2 or numNeighbors == 3)) or \
-                   (not cell.isOn and numNeighbors != 3):
-                    return False  # The game is not ended
-        return True  # The game has ended
+    def next_state(self):
+        # Count neighbors using convolution
+        neighbors = sum(np.roll(np.roll(self.state, i, 0), j, 1)
+                        for i in (-1, 0, 1) for j in (-1, 0, 1)
+                        if (i != 0 or j != 0))
+        if self.looping:
+            neighbors = neighbors % (self.xSize * self.ySize)
+        # Apply rules
+        birth = (neighbors == 3) & (~self.state)
+        survive = ((neighbors == 2) | (neighbors == 3)) & self.state
+        self.state = birth | survive
 
-class GameOfLifeGUI():
-    def __init__(self, root, board):
+    def is_ended(self):
+        # Check if the board has reached a stable state
+        return False  # Simplified for performance; implement if needed
+
+class MultiBoardGameOfLifeGUI:
+    def __init__(self, root, num_boards=16, boards_per_row=4, board_size=30, cell_size=10, randomize=True):
         self.root = root
-        self.board = board
+        self.num_boards = num_boards
+        self.boards_per_row = boards_per_row
+        self.board_size = board_size
+        self.cell_size = cell_size
         self.running = False
-        self.cell_size = 20
+        self.current_delay = 100  # milliseconds
 
-        # Create Canvas
-        self.canvas = tk.Canvas(root, width=self.board.xSize * self.cell_size,
-                                height=self.board.ySize * self.cell_size, bg="white")
-        self.canvas.pack()
+        # Initialize boards
+        self.boards = [Board(self.board_size, self.board_size, randomize=randomize) for _ in range(self.num_boards)]
 
-        # Create Control Frame
+        # Create main frames with scrollable area
+        self.scrollable_frame = ScrollableFrame(root)
+        self.scrollable_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Create PhotoImage canvases for each board
+        self.canvases = []
+        self.images = []
+        for idx, board in enumerate(self.boards):
+            row = idx // self.boards_per_row
+            col = idx % self.boards_per_row
+            canvas = tk.Canvas(self.scrollable_frame.scrollable_frame,
+                               width=board.xSize * self.cell_size,
+                               height=board.ySize * self.cell_size,
+                               bg="white")
+            canvas.grid(row=row, column=col, padx=2, pady=2)
+            # Create a PhotoImage for the board
+            image = tk.PhotoImage(width=board.xSize, height=board.ySize)
+            canvas_image = canvas.create_image((0, 0), anchor="nw", image=image)
+            self.canvases.append(canvas)
+            self.images.append(image)
+            # Bind click event
+            canvas.bind("<Button-1>", lambda event, b=board: self.toggle_cell(event, b))
+            self.update_photo(board, image)
+
+        # Create shared controls
         self.controls_frame = tk.Frame(root)
-        self.controls_frame.pack(pady=10)
+        self.controls_frame.pack(pady=5)
 
-        # Start Button
         self.start_button = tk.Button(self.controls_frame, text="Start", command=self.start)
         self.start_button.pack(side=tk.LEFT, padx=5)
 
-        # Stop Button
         self.stop_button = tk.Button(self.controls_frame, text="Stop", command=self.stop, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT, padx=5)
 
-        # Step Button
         self.step_button = tk.Button(self.controls_frame, text="Step", command=self.step)
         self.step_button.pack(side=tk.LEFT, padx=5)
 
-        # Random Button
-        self.random_button = tk.Button(self.controls_frame, text="Random", command=self.random)
+        self.random_button = tk.Button(self.controls_frame, text="Random", command=self.randomize_boards)
         self.random_button.pack(side=tk.LEFT, padx=5)
 
-        # Clear Button
-        self.clear_button = tk.Button(self.controls_frame, text="Clear", command=self.clear_board)
+        self.clear_button = tk.Button(self.controls_frame, text="Clear", command=self.clear_boards)
         self.clear_button.pack(side=tk.LEFT, padx=5)
 
-        # Toggle Looping Button
-        self.toggle_looping_button = tk.Button(self.controls_frame, text="Looping: On", command=self.toggle_looping)
-        self.toggle_looping_button.pack(side=tk.LEFT, padx=5)
-
-        # Quit Button
         self.quit_button = tk.Button(self.controls_frame, text="Quit", command=self.root.quit)
         self.quit_button.pack(side=tk.LEFT, padx=5)
 
         # Dynamic Board Size Input
         self.size_frame = tk.Frame(root)
-        self.size_frame.pack(pady=10)
+        self.size_frame.pack(pady=5)
 
         self.size_label = tk.Label(self.size_frame, text="Board Size:")
         self.size_label.pack(side=tk.LEFT)
 
         self.size_entry = tk.Entry(self.size_frame, width=5)
         self.size_entry.pack(side=tk.LEFT, padx=5)
-        self.size_entry.insert(0, "30")  # Default size
+        self.size_entry.insert(0, str(self.board_size))  # Default size
 
         self.set_size_button = tk.Button(self.size_frame, text="Set Size", command=self.set_board_size)
         self.set_size_button.pack(side=tk.LEFT)
@@ -158,7 +110,6 @@ class GameOfLifeGUI():
         self.delay_label = tk.Label(self.controls_frame, text="Run Delay (ms):")
         self.delay_label.pack(side=tk.LEFT, padx=(20, 5))
 
-        # Define validation function
         def validate_input(P):
             if P == "":
                 return True
@@ -168,99 +119,80 @@ class GameOfLifeGUI():
 
         self.delay_entry = tk.Entry(self.controls_frame, width=10, validate='key', validatecommand=vcmd)
         self.delay_entry.pack(side=tk.LEFT, padx=5)
-        self.delay_entry.insert(0, "100")  # Default delay
+        self.delay_entry.insert(0, str(self.current_delay))  # Default delay
 
         self.set_delay_button = tk.Button(self.controls_frame, text="Set", command=self.set_delay)
         self.set_delay_button.pack(side=tk.LEFT, padx=5)
 
-        self.current_delay = 100  # Initial delay in milliseconds
-
         # Bind the Enter key to the set_delay method
         self.delay_entry.bind("<Return>", lambda event: self.set_delay())
 
-        # Bind Click Event to Toggle Cells
-        self.canvas.bind("<Button-1>", self.toggle_cell)
+    def toggle_cell(self, event, board):
+        # Determine which board was clicked
+        for idx, canvas in enumerate(self.canvases):
+            bbox = canvas.bbox("all")
+            x1, y1, x2, y2 = bbox
+            if x1 <= event.x <= x2 and y1 <= event.y <= y2:
+                board_idx = idx
+                break
+        else:
+            return  # Click was not on any canvas
 
-        # Draw Initial State
-        self.update_canvas()
+        # Calculate cell coordinates
+        cell_x = event.x // self.cell_size
+        cell_y = event.y // self.cell_size
+        if 0 <= cell_x < board.xSize and 0 <= cell_y < board.ySize:
+            board.state[cell_x, cell_y] = not board.state[cell_x, cell_y]
+            self.update_photo(board, self.images[board_idx])
 
-    def set_board_size(self):
-        size_str = self.size_entry.get()
-        try:
-            size = abs(int(size_str))
-            new_state = self.generate_new_state(size)  # Generate new state based on the new size
-            self.board = Board(size, size, randomize=False)  # Create a new board with the specified size
-            self.board.state = new_state  # Assign the new state to the new board
-            self.update_canvas()
-        except ValueError:
-            messagebox.showerror("Invalid Input", "Please enter a valid number for the board size.")
+    def update_photo(self, board, image):
+        # Convert the boolean state to a list of color strings
+        data = ""
+        for y in range(board.ySize):
+            row = ""
+            for x in range(board.xSize):
+                color = "black" if board.state[x, y] else "white"
+                row += "black " if board.state[x, y] else "white "
+            data += "{ " + row.strip() + "}\n"
+        # Update the PhotoImage
+        image.put(data)
 
-    def generate_new_state(self, new_size):
-        # Create a new state array for the new board size
-        new_state = []
-        for x in range(new_size):
-            row = []
-            for y in range(new_size):
-                # Retain cell state if the position was previously occupied, else create a new Cell
-                if x < self.board.xSize and y < self.board.ySize:
-                    isOn = self.board.state[x][y].isOn
-                else:
-                    isOn = False
-                row.append(Cell(isOn, 1, 0, x, y))
-            new_state.append(row)
-        return new_state
-
-    def toggle_cell(self, event):
-        x = event.x // self.cell_size
-        y = event.y // self.cell_size
-        if 0 <= x < self.board.xSize and 0 <= y < self.board.ySize:
-            self.board.state[x][y].toggle()
-        self.update_canvas()
-
-    def update_canvas(self):
-        self.canvas.delete("all")
-        for x in range(self.board.xSize):
-            for y in range(self.board.ySize):
-                color = "black" if self.board.state[x][y].isOn else "white"
-                self.canvas.create_rectangle(
-                    x * self.cell_size, y * self.cell_size,
-                    (x + 1) * self.cell_size, (y + 1) * self.cell_size,
-                    fill=color, outline="gray"
-                )
+    def update_all_photos(self):
+        for board, image in zip(self.boards, self.images):
+            self.update_photo(board, image)
 
     def start(self):
-        if not self.running:
+        if not hasattr(self, 'running') or not self.running:
             self.running = True
             self.start_button.config(state=tk.DISABLED)
             self.stop_button.config(state=tk.NORMAL)
-            self.toggle_looping_button.config(state=tk.DISABLED)
             self.run()
 
     def stop(self):
-        if self.running:
+        if hasattr(self, 'running') and self.running:
             self.running = False
             self.start_button.config(state=tk.NORMAL)
             self.stop_button.config(state=tk.DISABLED)
-            self.toggle_looping_button.config(state=tk.NORMAL)
 
     def step(self):
-        self.board.nextState()
-        self.update_canvas()
-        if self.board.isEnded():
-            self.stop()
+        for board in self.boards:
+            board.next_state()
+        self.update_all_photos()
 
     def run(self):
         if self.running:
             self.step()
             self.root.after(self.current_delay, self.run)
 
-    def random(self):
-        self.board.generateNew(randomize=True)
-        self.update_canvas()
+    def randomize_boards(self):
+        for board in self.boards:
+            board.randomize()
+        self.update_all_photos()
 
-    def clear_board(self):
-        self.board.clear()
-        self.update_canvas()
+    def clear_boards(self):
+        for board in self.boards:
+            board.clear()
+        self.update_all_photos()
         self.stop()
 
     def set_delay(self):
@@ -275,23 +207,82 @@ class GameOfLifeGUI():
             self.delay_entry.delete(0, tk.END)
             self.delay_entry.insert(0, str(self.current_delay))  # Revert to previous valid delay
 
-    def toggle_looping(self):
-        self.board.looping = not self.board.looping
-        state = "On" if self.board.looping else "Off"
-        self.toggle_looping_button.config(text=f"Looping: {state}")
+    def set_board_size(self):
+        size_str = self.size_entry.get()
+        try:
+            size = abs(int(size_str))
+            if size <= 0:
+                raise ValueError
+            # Update board size
+            self.board_size = size
+            # Reinitialize boards
+            self.boards = [Board(self.board_size, self.board_size, randomize=False) for _ in range(self.num_boards)]
+            # Destroy existing canvases
+            for canvas in self.canvases:
+                canvas.destroy()
+            self.canvases = []
+            self.images = []
+            # Recreate PhotoImages and canvases
+            for idx, board in enumerate(self.boards):
+                row = idx // self.boards_per_row
+                col = idx % self.boards_per_row
+                canvas = tk.Canvas(self.scrollable_frame.scrollable_frame,
+                                   width=board.xSize * self.cell_size,
+                                   height=board.ySize * self.cell_size,
+                                   bg="white")
+                canvas.grid(row=row, column=col, padx=2, pady=2)
+                image = tk.PhotoImage(width=board.xSize, height=board.ySize)
+                canvas_image = canvas.create_image((0, 0), anchor="nw", image=image)
+                self.canvases.append(canvas)
+                self.images.append(image)
+                # Bind click event
+                canvas.bind("<Button-1>", lambda event, b=board: self.toggle_cell(event, b))
+                self.update_photo(board, image)
+        except ValueError:
+            messagebox.showerror("Invalid Input", "Please enter a valid positive number for the board size.")
 
-    def on_closing(self):
-        self.running = False
-        self.root.destroy()
+class ScrollableFrame(tk.Frame):
+    def __init__(self, container, *args, **kwargs):
+        super().__init__(container, *args, **kwargs)
+
+        canvas = tk.Canvas(self)
+        scrollbar_v = tk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scrollbar_h = tk.Scrollbar(self, orient="horizontal", command=canvas.xview)
+        self.scrollable_frame = tk.Frame(canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(
+                scrollregion=canvas.bbox("all")
+            )
+        )
+
+        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        canvas.configure(yscrollcommand=scrollbar_v.set, xscrollcommand=scrollbar_h.set)
+
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar_v.grid(row=0, column=1, sticky="ns")
+        scrollbar_h.grid(row=1, column=0, sticky="ew")
+
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.title("Game of Life")
+    root.title("Game of Life - Multiple Boards Optimized")
 
-    board = Board(30, 30, randomize=True)  # Create a 30x30 board with random starting cells
-    game_gui = GameOfLifeGUI(root, board)
+    # Parameters
+    NUM_BOARDS = 16         # Total number of boards
+    BOARDS_PER_ROW = 4        # Number of boards per row in the grid
+    BOARD_SIZE = 300           # Size of each board (30x30)
+    CELL_SIZE = 10            # Pixel size of each cell
+    RANDOMIZE_INITIAL = True  # Whether to randomize initial states
+
+    game_gui = MultiBoardGameOfLifeGUI(root, num_boards=NUM_BOARDS, boards_per_row=BOARDS_PER_ROW,
+                                      board_size=BOARD_SIZE, cell_size=CELL_SIZE, randomize=RANDOMIZE_INITIAL)
 
     # Handle window closing gracefully
-    root.protocol("WM_DELETE_WINDOW", game_gui.on_closing)
+    root.protocol("WM_DELETE_WINDOW", root.quit)
 
     root.mainloop()
