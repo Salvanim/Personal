@@ -31,8 +31,6 @@ def generateArrayString(array, startingString='', count=0, savedArray=None, prev
             if index != len(array) - 1:
                 outputString += ","
         index += 1
-    if count == 0:
-        outputString.lstrip('\n').rstrip('\n')
     return outputString
 
 
