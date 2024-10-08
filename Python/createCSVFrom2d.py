@@ -63,7 +63,7 @@ def generate_multi_dimensional_array(value, dimensions, repeat):
     return [generate_multi_dimensional_array(value, dimensions - 1, repeat) for _ in range(repeat)]
 
 
-array = generate_multi_dimensional_array([1], 5, 30)
+array = generate_multi_dimensional_array(1, 3, 12)
 counts = count_repeated_newlines(generateArrayString(array))
 countsSet = list(set(counts))
 endDictionary = {}
