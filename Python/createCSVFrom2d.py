@@ -35,9 +35,9 @@ def generateArrayString(array, startingString='', count=0, savedArray=None, prev
 
 def count_repeated_newlines(text):
     newline_counts = []
-    
+
     current_count = 0
-    
+
     for char in text:
         if char == '\n':
             current_count += 1
@@ -45,14 +45,13 @@ def count_repeated_newlines(text):
             if current_count > 0:
                 newline_counts.append(current_count)
             current_count = 0
-    
+
     if current_count > 0:
         newline_counts.append(current_count)
-    
+
     return newline_counts
 
 def csv2d(array, name):
-    print(count_repeated_newlines(generateArrayString(array)))
     with open(name+'.csv', 'w') as file:
         file.write(generateArrayString(array))
     return file
@@ -63,11 +62,11 @@ def generate_multi_dimensional_array(value, dimensions, repeat):
     return [generate_multi_dimensional_array(value, dimensions - 1, repeat) for _ in range(repeat)]
 
 
-array = generate_multi_dimensional_array(1, 3, 12)
+array = generate_multi_dimensional_array([1,2,3,4,5,6,7], 3, 12)
 counts = count_repeated_newlines(generateArrayString(array))
 countsSet = list(set(counts))
 endDictionary = {}
 for n in countsSet:
     endDictionary[n] = counts.count(n)
 print(endDictionary)
-#csv2d(array,'created')
+csv2d(array,'Created/created')
