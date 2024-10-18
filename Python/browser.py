@@ -4,7 +4,7 @@ import copy
 from bs4 import BeautifulSoup
 import webbrowser
 from PIL import Image, ImageTk
-
+from tkinterhtml import HTMLLabel
 
 class GUI:
     def __init__(self, title="Custom GUI", width=800, height=600):
@@ -39,6 +39,11 @@ class GUI:
         self.widgets[identifier] = text
         return text
 
+    def add_html(self, identifier, html):
+        label = HTMLLabel(self.root, html)
+        label.pack()
+        return label
+
     def add_checkbox(self, identifier, text, x, y, variable=None, command=None):
         if variable is None:
             variable = tk.IntVar()
@@ -71,6 +76,17 @@ class GUI:
 
     def get_widget(self, identifier):
         return self.widgets.get(identifier, None)
+
+    def add_webview(self, identifier, html_content, x, y, width=800, height=600):
+        self.root.update_idletasks()  # Ensure the window is updated before placing webview
+        window = webview.create_window("Webview", html=html_content, width=width, height=height)
+
+        # pywebview has its own loop, so we start it in a separate thread to keep Tkinter responsive
+        import threading
+        threading.Thread(target=webview.start, daemon=True).start()
+
+        self.widgets[identifier] = window
+        return window
 
     def update_label(self, identifier, new_text, updateText=True, new_x=0, new_y=0, updateX=False, updateY=False, new_font=("Arial", 12), updateFont=False, new_color="black", updateColor=False):
         widget = self.get_widget(identifier)
@@ -205,3 +221,36 @@ class GUI:
     # --- Running the GUI ---
     def run(self):
         self.root.mainloop()
+
+if __name__ == "__main__":
+    gui = GUI("HTML GUI Example", 1000, 800)
+
+    # Example HTML/CSS/JavaScript content
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; text-align: center; }
+            h1 { color: green; }
+            button { padding: 10px 20px; background-color: blue; color: white; border: none; cursor: pointer; }
+        </style>
+        <script>
+            function sayHello() {
+                alert("Hello from HTML, CSS, and JavaScript!");
+            }
+        </script>
+    </head>
+    <body>
+        <h1>Welcome to HTML GUI</h1>
+        <p>This is a GUI rendered with HTML, CSS, and JavaScript!</p>
+        <button onclick="sayHello()">Click Me</button>
+    </body>
+    </html>
+    """
+
+    # Adding the webview
+    gui.add_html(html_content)
+
+    # Run the GUI
+    gui.run()
