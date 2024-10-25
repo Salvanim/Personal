@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+import time
 class Curve:
     def __init__(self, center, radius, arc_length):
         """
@@ -11,6 +11,9 @@ class Curve:
         self.center = np.array(center)
         self.radius = radius
         self.arc_length = arc_length  # Distance along the arc to trace
+
+    def __str__(self):
+        return f"[{self.center},{self.radius},{self.arc_length}]"
 
 def line_circle_intersection(p1, p2, curve):
     """
@@ -97,6 +100,7 @@ def generate_shape_with_curves(points, curves):
 
             # Check intersection with all curve points
             for curve in curves:
+                print(curve)
                 result = line_circle_intersection(current_point, p2, curve)
                 if result:
                     intersection, dist_to_intersection = result
