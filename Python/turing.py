@@ -1,6 +1,7 @@
 import re
 import time
 import math
+import random
 
 class Turing:
     def __init__(self, startSet=[0], placement=0, changeRules={0:1, 1:0}, movementRules={"E": ["B", "extend_right"]}):
@@ -16,7 +17,7 @@ class Turing:
         if self.placement > len(self)-1:
             self.placement = len(self)-1
         return self.set[self.placement]
-    
+
     def __getitem__(self, index):
         self.placement = index
         return self()
@@ -26,7 +27,7 @@ class Turing:
 
     def __len__(self):
         return len(self.set)
-    
+
     def index(self, obj):
         return self.set.index(obj) if obj in self.set else -1
 
@@ -46,6 +47,17 @@ class Turing:
 
     def cRuleLength(self):
         return len(self.crules)
+
+    def addMRule(self, key, value):
+        self.mrules[key] = value
+
+    def getMRule(self, index):
+        keys = list(self.mrules.keys())
+        values = list(self.mrules.values())
+        return keys[index], values[index]
+
+    def mRuleLength(self):
+        return len(self.mrules)
 
     def applyMovementRules(self):
         for rule, action in self.mrules.items():
@@ -89,12 +101,12 @@ class Turing:
             self.placement = math.floor((len(self))/2)
         elif action == "R":
             self.direction *= -1
-        elif isinstance(action, tuple) and action[0] == "extend_right":
-            value = action[1] if len(action) > 1 else 0  # Default value is 0
-            self.set.append(value)  # Extend the tape to the right with value
-        elif isinstance(action, tuple) and action[0] == "extend_left":
-            value = action[1] if len(action) > 1 else 0  # Default value is 0
-            self.set.insert(0, value)  # Extend the tape to the left with value
+        elif isinstance(action, tuple) and action[0] == "ER":
+            value = action[1] if len(action) > 1 else 0
+            self.set.append(value)
+        elif isinstance(action, tuple) and action[0] == "EL":
+            value = action[1] if len(action) > 1 else 0
+            self.set.insert(0, value)
             self.placement += 1
         elif callable(action):
             action(self)
@@ -111,21 +123,19 @@ class Turing:
             print(self)
             self.applyChangeRules()
             self.applyMovementRules()
-            
+
             # Adjust placement based on the movement direction
             self.placement += self.direction
             count += 1
             time.sleep(delay)
 
-def changeFunc(machine: Turing):
-    machine.addCRule(machine.getCRule(machine.cRuleLength() - 1)[1], machine.getCRule(machine.cRuleLength() - 1)[1] + 1)
-
 # Testing with multiple actions for rule "E"
 t = Turing(
-    [0],
-    changeRules={0: 1},
+    [0,0,0,0,0,0,0,0],
+    changeRules={0:1, 1:0},
     movementRules={
-        "E": [("extend_right", 0), changeFunc, "B"],
+        "E":["ER", "ER"],
+        "B":"EL"
     }
 )
-t.run(iterations=1000, delay=0)
+t.run(iterations=255, delay=0.175)
