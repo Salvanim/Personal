@@ -1,4 +1,9 @@
 from switch_package import switch
+import random
+t = switch(end=random.randint)
 
-t = switch(1, 2, 3, 4, 5)
-print(t(2))
+
+for n in range(100):
+    t[n] = n+1
+
+
