@@ -1,5 +1,6 @@
 import copy
 from types import UnionType
+
 class Dict:
 
   def __init__(self, keys: list = None, values: list = None, loop: bool = True):
@@ -347,10 +348,10 @@ class Dict:
     return self[key]
 
   def keys(self):
-    return self.keys  # or use `return iter(self.keys)` for an iterator
+    return self.keys
 
   def values(self):
-    return self.values  # or `return iter(self.values)`
+    return self.values
 
   def items(self):
     return zip(self.keys, self.values)
@@ -763,10 +764,3 @@ class Dict:
 
   def __imatmul__(self,other):
      return self.__matmul__(other)
-
-
-b = Dict.asArg(1, 10, 2, 20, 3, 30)
-
-b @ (0,1)
-b @ 3
-print(b)
