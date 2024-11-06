@@ -56,12 +56,13 @@ def render(width, height, fov, player_pos):
 # Main function
 def main():
     width, height = 1000, 1000  # Increase resolution to 10,000 x 10,000
+    screenW, screenH = 800, 800
     fov = np.pi / 3  # Field of view (60 degrees)
     player_pos = np.array([2.0, 2.0])  # Starting player position
     speed = 0.1  # Player movement speed
 
     # Set up pygame screen
-    screen = pygame.display.set_mode((width // 10, height // 10))  # Display at reduced size
+    screen = pygame.display.set_mode((screenW, screenH))  # Display at reduced size
     pygame.display.set_caption("Optimized Raymarching")
 
     clock = pygame.time.Clock()
@@ -99,7 +100,7 @@ def main():
 
         # Convert numpy array to a surface (downsample for display)
         downsampled_image = image[::10, ::10]  # Downsample for display
-        surface = pygame.surfarray.make_surface(np.rot90((downsampled_image * 255).astype(np.uint8)))
+        surface = pygame.surfarray.make_surface(np.rot90((image * 255).astype(np.uint8)))
         screen.blit(surface, (0, 0))
 
         # Refresh display
