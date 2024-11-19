@@ -1,0 +1,4 @@
+initial_quantity,new_quantity,initial_price,new_price,base_price,supply,time_sensitivity,external_factors,price_change
+100,120,50,40,100,80,2,1,-16.67
+150,160,70,60,150,100,3,2,-8.4
+200,180,90,85,120,90,2,1.5,61.71
