@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synonym Defines</title>
+</head>
+<body>
+    <input type="text" id="textInput" placeholder="Enter new word">
+    <button id="submit">Submit</button>
+    <p id="output"></p>
+<script>
+    async function getDefinitions(word) {
+        const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${word}`;
+        try {
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error(`Error: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const definitions = data[0].meanings.flatMap(meaning =>
+                meaning.definitions.map(def => def.definition)
+            );
+
+            return definitions;
+        } catch (error) {
+            console.error(error);
+            return null;
+        }
+    }
+
+    async function getSynonyms(word) {
+        const url = `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}`;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Error fetching data: ${response.statusText}`);
+            }
+            const data = await response.json();
+
+            const synonyms = data.map(entry => entry.word);
+            return synonyms;
+        } catch (error) {
+            console.error(error);
+            return [];
+        }
+    }
+
+    async function getSynoDefinitions(word) {
+        try {
+            const synonyms = await getSynonyms(word);
+
+            const definitions = [];
+            for (const synonym of synonyms) {
+                if (!synonym.includes(' ')) {
+                    const def = await getDefinitions(synonym);
+                    if (def) {
+                        definitions.push(...def);
+                    }
+                }
+            }
+            return definitions;
+        } catch (error) {
+            console.error(error);
+            return [];
+        }
+    }
+
+    async function runAsyncFunction(asyncFunc, runFunction, ...args) {
+        try {
+            await asyncFunc(...args).then(result => runFunction(result));
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    function addArrayAsList(array) {
+        const targetElement = document.getElementById("output");
+        targetElement.innerHTML = "";
+
+        const ul = document.createElement('ul');
+
+        array.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            ul.appendChild(li);
+        });
+        targetElement.appendChild(ul);
+    }
+
+    function runFromDocument(){
+        runAsyncFunction(getSynoDefinitions, addArrayAsList, document.getElementById('textInput').value)
+    }
+
+    document.getElementById('submit').onclick = runFromDocument
+
+</script>
+</body>
+</html>

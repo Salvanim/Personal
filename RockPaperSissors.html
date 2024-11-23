@@ -1,0 +1,609 @@
+<html><head><base href="." />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f0f8ff; padding: 20px; }
+    .game-container { max-width: 800px; margin: 0 auto; text-align: center; }
+    .choices { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 20px 0; }
+    .choice-btn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .choice-btn:hover { transform: scale(1.1); }
+    #result { font-size: 24px; margin: 20px; color: #333; }
+    #network-container {
+      width: 600px;
+      height: 400px;
+      margin: 20px auto;
+      border: 1px solid #ccc;
+      background: white;
+      cursor: move;
+    }
+    #download-btn, #add-item-btn, #gen-item-btn, #export-text-btn {
+      background: #2196F3;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 10px;
+    }
+    .add-item-container {
+      margin: 20px 0;
+    }
+    #new-item-input {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-right: 10px;
+    }
+    .node-info {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 5px;
+      display: none;
+      pointer-events: none;
+    }
+    .node circle {
+      cursor: pointer;
+      transition: r 0.2s;
+    }
+    .node:hover circle {
+      r: 25;
+    }
+    .node text {
+      pointer-events: none;
+    }
+    .link {
+      cursor: pointer;
+      transition: stroke-width 0.2s;
+    }
+    .link:hover {
+      stroke-width: 3;
+    }
+    #network-container svg {
+      cursor: move;
+    }
+    #import-text-input {
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-right: 10px;
+      width: 60%;
+    }
+    #import-text-btn {
+      background: #2196F3;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/0.5.0-beta4/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/random-words@1.3.0/index.min.js"></script>
+  </head>
+  <body>
+  <div class="game-container">
+    <h1>Evolving Rock Paper Scissors</h1>
+    <div class="add-item-container">
+      <input type="text" id="new-item-input" placeholder="Enter new item name">
+      <button id="add-item-btn">Add New Item</button>
+      <button id="gen-item-btn">Gen New Item</button>
+    </div>
+    <div class="choices" id="choices"></div>
+    <div id="result"></div>
+    <div id="network-container"></div>
+    <div class="node-info" id="node-info"></div>
+    <button id="download-btn">Download Network Image</button>
+    <button id="export-text-btn">Export Network as Text</button>
+    <div class="add-item-container">
+      <input type="text" id="import-text-input" placeholder="Enter network relationships (e.g. Rock→Scissors Paper→Rock)">
+      <button id="import-text-btn">Import Network</button>
+    </div>
+  </div>
+
+  <script>
+  class GameItem {
+    constructor(name) {
+      this.name = name;
+      this.beats = new Set();
+      this.beatenBy = new Set();
+      this.words = name.toLowerCase().split(' ');
+    }
+  }
+
+  class Game {
+    constructor() {
+      this.items = new Map();
+      this.addItem('Rock');
+      this.addItem('Paper');
+      this.addItem('Scissors');
+
+      this.addRelationship('Rock', 'Scissors');
+      this.addRelationship('Scissors', 'Paper');
+      this.addRelationship('Paper', 'Rock');
+
+      this.initializeWordLists();
+    }
+
+    async initializeWordLists() {
+      try {
+        const adjResponse = await fetch('https://api.datamuse.com/words?rel_jjb=thing&max=1000');
+        this.adjectives = (await adjResponse.json()).map(word => word.word);
+        const nounResponse = await fetch('https://api.datamuse.com/words?rel_jja=big&max=1000');
+        this.nouns = (await nounResponse.json()).map(word => word.word);
+        const verbResponse = await fetch('https://api.datamuse.com/words?sp=*&md=p&max=1000');
+        this.verbs = (await verbResponse.json())
+          .filter(word => word.tags && word.tags.includes('v'))
+          .map(word => word.word);
+      } catch (error) {
+        this.adjectives = randomWords({ exactly: 1000 });
+        this.nouns = randomWords({ exactly: 1000 });
+        this.verbs = randomWords({ exactly: 1000 });
+      }
+    }
+
+    async getSynonyms(word) {
+        const url = `https://api.datamuse.com/words?rel_syn=${encodeURIComponent(word)}`;
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Error fetching data: ${response.statusText}`);
+            }
+            const data = await response.json();
+
+            // Extract synonyms from the API response
+            const synonyms = data.map(entry => entry.word);
+            return synonyms;
+        } catch (error) {
+            console.error("An error occurred:", error);
+            return [];
+        }
+    }
+
+    async getDefinitions(word) {
+        const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${word}`;
+
+        try {
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error(`Error: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const definitions = data[0].meanings.flatMap(meaning =>
+                meaning.definitions.map(def => def.definition)
+            );
+
+            return definitions;
+        } catch (error) {
+            console.error('Error fetching word definitions:', error);
+            return null;
+        }
+    }
+
+    async calculateSimilarity(item1, item2) {
+      const words1 = item1.words;
+      const words2 = item2.words;
+
+      const set1 = new Set(words1);
+      const set2 = new Set(words2);
+      // Jaccard similarity calculation
+      const intersection = [...set1].filter(word => set2.has(word));
+      const union = new Set([...words1, ...words2]);
+
+      let semanticScore = 0;
+      var synonymsContent = []
+
+      // Helper function for semantic checks
+      function hasSemanticMatch(group1, group2) {
+        return group1.some(w => set1.has(w)) && group2.some(w => set2.has(w));
+      }
+
+
+      if (hasSemanticMatch(['rock', 'stone', 'hard'], ['scissors', 'cut', 'sharp'])) {
+        semanticScore += 0.3;
+      }
+      if (hasSemanticMatch(['scissors', 'cut', 'sharp'], ['paper', 'soft', 'flat'])) {
+        semanticScore += 0.3;
+      }
+      if (hasSemanticMatch(['paper', 'soft', 'flat'], ['rock', 'stone', 'hard'])) {
+        semanticScore += 0.3;
+      }
+
+      const jaccardScore = intersection.length / union.size;
+      return jaccardScore + semanticScore;
+    }
+
+    addItem(name) {
+      if (!this.items.has(name)) {
+        this.items.set(name, new GameItem(name));
+      }
+    }
+
+    addRelationship(winner, loser) {
+      const winnerItem = this.items.get(winner);
+      const loserItem = this.items.get(loser);
+      if (winnerItem && loserItem) {
+        winnerItem.beats.add(loser);
+        loserItem.beatenBy.add(winner);
+      }
+    }
+
+    removeRelationship(winner, loser) {
+      const winnerItem = this.items.get(winner);
+      const loserItem = this.items.get(loser);
+      if (winnerItem && loserItem) {
+        winnerItem.beats.delete(loser);
+        loserItem.beatenBy.delete(winner);
+      }
+    }
+
+    play(player1Choice, player2Choice) {
+      if (player1Choice === player2Choice) return 'Tie!';
+      if (this.items.get(player1Choice).beats.has(player2Choice)) return 'You win!';
+      return 'Computer wins!';
+    }
+
+    generateNewItem() {
+      if (!this.adjectives || !this.nouns || !this.verbs) {
+        return 'New Item';
+      }
+
+      const wordType = Math.floor(Math.random() * 3); // 0 = noun, 1 = adjective, 2 = verb
+
+      let newName = '';
+
+      switch(wordType) {
+        case 0: // noun
+          newName = this.nouns[Math.floor(Math.random() * this.nouns.length)];
+          break;
+        case 1: // adjective
+          newName = this.adjectives[Math.floor(Math.random() * this.adjectives.length)];
+          break;
+        case 2: // verb
+          newName = this.verbs[Math.floor(Math.random() * this.verbs.length)];
+          break;
+      }
+
+      // Capitalize the word
+      newName = newName.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+
+      this.addItem(newName);
+      this.createRelationships(newName);
+      return newName;
+    }
+
+    createRelationships(newItemName) {
+      const newItem = this.items.get(newItemName);
+      const existingItems = Array.from(this.items.keys()).filter(item => item !== newItemName);
+
+      existingItems.forEach(existingItemName => {
+        const existingItem = this.items.get(existingItemName);
+        const similarity = this.calculateSimilarity(newItem, existingItem);
+
+        // Randomly decide if the new item beats the existing item or vice versa
+        if (Math.random() < 0.5) {
+          this.addRelationship(newItemName, existingItemName);
+        } else {
+          this.addRelationship(existingItemName, newItemName);
+        }
+      });
+    }
+  }
+
+  const game = new Game();
+  let gameCount = 0;
+
+  function updateChoices() {
+    const choicesDiv = document.getElementById('choices');
+    choicesDiv.innerHTML = '';
+    game.items.forEach((item, name) => {
+      const button = document.createElement('button');
+      button.className = 'choice-btn';
+      button.textContent = name;
+      button.onclick = () => playRound(name);
+      choicesDiv.appendChild(button);
+    });
+    updateNetwork();
+  }
+
+  function playRound(playerChoice) {
+    const choices = Array.from(game.items.keys());
+    const computerChoice = choices[Math.floor(Math.random() * choices.length)];
+    const result = game.play(playerChoice, computerChoice);
+
+    document.getElementById('result').innerHTML =
+      `You chose ${playerChoice}<br>Computer chose ${computerChoice}<br>${result}`;
+
+    gameCount++;
+  }
+
+  function createItem(){
+    const newItem = game.generateNewItem();
+    updateChoices();
+  }
+
+  function updateNetwork() {
+    const container = document.getElementById('network-container');
+    container.innerHTML = '';
+
+    const width = 600;
+    const height = 400;
+
+    const svg = d3.select('#network-container')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height);
+
+    const g = svg.append('g');
+
+    const zoom = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => {
+            g.attr('transform', event.transform);
+        });
+
+    svg.call(zoom);
+
+    // Define arrow markers for the links
+    svg.append('defs').append('marker')
+        .attr('id', 'arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 35)
+        .attr('markerWidth', 8)
+        .attr('markerHeight', 8)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5')
+        .attr('fill', '#999');
+
+    const nodes = Array.from(game.items.keys()).map(name => ({ id: name }));
+    const links = [];
+
+    game.items.forEach((item, name) => {
+        item.beats.forEach(target => {
+            links.push({
+                source: name,
+                target: target,
+                type: 'beats'
+            });
+        });
+    });
+
+    const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(150))
+        .force('charge', d3.forceManyBody().strength(-300))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(50));
+
+    const link = g.append('g')
+        .selectAll('line')
+        .data(links)
+        .enter().append('line')
+        .attr('class', 'link')
+        .attr('stroke', '#999')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-opacity', 0.6)
+        .attr('marker-end', 'url(#arrow)');
+
+    const node = g.append('g')
+        .selectAll('.node')
+        .data(nodes)
+        .enter().append('g')
+        .attr('class', 'node')
+        .call(d3.drag()
+            .on('start', dragStarted)
+            .on('drag', dragged)
+            .on('end', dragEnded));
+
+    node.append('circle')
+        .attr('r', 20)
+        .attr('fill', '#69b3a2')
+        .on('mouseover', function(event, d) {
+            const item = game.items.get(d.id);
+            const nodeInfo = document.getElementById('node-info');
+            nodeInfo.style.display = 'block';
+            nodeInfo.style.left = (event.pageX + 10) + 'px';
+            nodeInfo.style.top = (event.pageY - 10) + 'px';
+            nodeInfo.innerHTML = `
+                <strong>${d.id}</strong><br>
+                Beats: ${Array.from(item.beats).join(', ') || 'None'}<br>
+                Beaten by: ${Array.from(item.beatenBy).join(', ') || 'None'}
+            `;
+        })
+        .on('mouseout', function() {
+            document.getElementById('node-info').style.display = 'none';
+        });
+
+    node.append('text')
+        .text(d => d.id)
+        .attr('text-anchor', 'middle')
+        .attr('dy', '.35em')
+        .style('font-size', '8px');
+
+    function dragStarted(event) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        event.subject.fx = event.subject.x;
+        event.subject.fy = event.subject.y;
+    }
+
+    function dragged(event) {
+        event.subject.fx = event.x;
+        event.subject.fy = event.y;
+    }
+
+    function dragEnded(event) {
+        if (!event.active) simulation.alphaTarget(0);
+        event.subject.fx = null;
+        event.subject.fy = null;
+    }
+
+    function zoomToFit() {
+      const bounds = g.node().getBBox();
+
+      if (!bounds || bounds.width === 0 || bounds.height === 0) {
+          return;
+      }
+
+      const fullWidth = width;
+      const fullHeight = height;
+      const widthScale = fullWidth / bounds.width;
+      const heightScale = fullHeight / bounds.height;
+      const scale = Math.min(widthScale, heightScale) * 0.8; // 80% scale for margin
+
+      const midX = bounds.x + bounds.width / 2;
+      const midY = bounds.y + bounds.height / 2;
+
+      const transform = d3.zoomIdentity
+          .translate(fullWidth / 2, fullHeight / 2)
+          .scale(scale)
+          .translate(-midX, -midY);
+
+      svg.transition()
+          .duration(750)
+          .call(zoom.transform, transform);
+    }
+
+    simulation.on('end', () => {
+        zoomToFit();
+    });
+
+    simulation.on('tick', () => {
+        link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+    svg.on('dblclick.zoom', () => {
+        zoomToFit();
+    });
+  }
+
+
+  document.getElementById('download-btn').onclick = function() {
+    // Get the SVG element
+    const svgElement = document.querySelector('#network-container svg');
+
+    // Create a serializer
+    const serializer = new XMLSerializer();
+
+    // Get the SVG string
+    const svgString = serializer.serializeToString(svgElement);
+
+    // Create a Blob from the SVG string
+    const blob = new Blob([svgString], {type: 'image/svg+xml'});
+
+    // Create object URL
+    const url = URL.createObjectURL(blob);
+
+    // Create temporary link and trigger download
+    const link = document.createElement('a');
+    link.download = 'game-network.svg';
+    link.href = url;
+    link.click();
+
+    // Clean up
+    URL.revokeObjectURL(url);
+  };
+
+  document.getElementById('add-item-btn').onclick = function() {
+    const input = document.getElementById('new-item-input');
+    const newItemName = input.value.trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
+    if (newItemName && !game.items.has(newItemName)) {
+      game.addItem(newItemName);
+      game.createRelationships(newItemName);
+      input.value = '';
+      updateChoices();
+    }
+  };
+
+  document.getElementById('gen-item-btn').onclick = function() {
+    createItem();
+  }
+
+  function exportNetworkAsText() {
+    let textOutput = [];
+
+    game.items.forEach((item, name) => {
+      const beats = Array.from(item.beats).length > 0 ?
+        Array.from(item.beats).map(target => `${name}→${target}`).join(' ') :
+        `${name}`;
+      textOutput.push(beats);
+    });
+
+    const finalText = textOutput.join(' ');
+
+    // Create a temporary textarea to copy the text
+    const textarea = document.createElement('textarea');
+    textarea.value = finalText;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+
+    // Show alert that text was copied
+    alert("Network relationships have been copied to clipboard:\n" + finalText);
+  }
+
+  function importNetworkFromText() {
+    const input = document.getElementById('import-text-input');
+    const text = input.value.trim();
+
+    if (!text) {
+        alert("Please enter valid network relationships.");
+        return;
+    }
+
+    // Clear existing relationships
+    game.items.forEach(item => {
+        item.beats.clear();
+        item.beatenBy.clear();
+    });
+
+    const relationships = text.split(/\s+/);
+    relationships.forEach(rel => {
+        const [winner, loser] = rel.split('→');
+        if (winner && loser) {
+            game.addItem(winner);
+            game.addItem(loser);
+            game.addRelationship(winner, loser);
+        } else {
+            game.addItem(rel); // Add standalone items
+        }
+    });
+
+    input.value = '';
+    updateChoices();
+    alert("Network relationships imported successfully!");
+  }
+
+
+  document.getElementById('import-text-btn').onclick = importNetworkFromText;
+  document.getElementById('export-text-btn').onclick = exportNetworkAsText;
+
+  updateChoices();
+  </script>
+  </body></html>
