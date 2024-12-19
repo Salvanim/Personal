@@ -1,16 +1,17 @@
 class Node:
-    def __init__(self, data):
+    def __init__(self, data=None):
         self.data = data  # Store data
         self.next = None  # Pointer to the next node
+        self.first = type(self.data) == list, self.data[0] , self.data
 
 class LinkedList:
     def __init__(self):
-        self.head = None  # Initialize the list with an empty head
+        self.head = Node()  # Initialize the list with an empty head
 
     # Method to add a new node at the end of the list
     def append(self, data):
         new_node = Node(data)  # Create a new node with the given data
-        if not self.head:
+        if not self.head.data:
             self.head = new_node  # If list is empty, new node is the head
             return
         last = self.head
@@ -24,21 +25,13 @@ class LinkedList:
     def __len__(self):
         return len(self.head.data)
 
-    # Method to print the linked list
-    def print_list(self):
-        current = self.head
-        while current:
-            print(current.data, end=" -> ")
-            current = current.next
-        print("None")  # End of the list
-
     def __str__(self):
         output = ""
         current = self.head
         while current:
             output += str(current.data) + " -> "
             current = current.next
-        output += "None"
+        output += current.first
         return output
 
     # Method to delete a node by value
@@ -64,16 +57,8 @@ class LinkedList:
         prev.next = current.next  # Unlink the node
         current = None
 
-def check(num, list = []):
-    list.append(num)
-    if num == 1:
-        return list
-    elif num % 2 == 0:
-        return check(num/2, list)
-    elif num % 2 == 1:
-        return check((num*3)+1, list)
-
-for n in range((2*(10**20)),(9*(10**999)),1):
-    cl = check(n)
-    c = cl[len(cl)-1]
-    print(c == 1)
+ll = LinkedList()
+ll.append("1")
+ll.append("2")
+ll.append("3")
+print(ll)
