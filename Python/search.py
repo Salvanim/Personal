@@ -11,10 +11,11 @@ class Search:
         for index, value in enumerate(array):
             self.index_map[value].append(index)
             self.max_index = max(self.max_index, index)
+        
         self._modified = True
 
     def __getitem__(self, value):
-        return self.index_map.get(value, [-1])
+        return self.index_map.get(value, [-1])[0]
 
     def __setitem__(self, value, new_index):
         if new_index not in (index for indices in self.index_map.values() for index in indices):
@@ -83,3 +84,7 @@ class Search:
         self.max_index = max(self.index_map.keys(), default=-1)
         self._modified = True  # Mark as modified
         return self
+
+S = Search([1,2,3,4,5,6,7,8,9,10])
+S.reverse()
+print(S)
