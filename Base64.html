@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to Base64 with Multiple Compression</title>
+</head>
+<body>
+    <h2>Image to Base64 with Sequential Compression</h2>
+    <input type="file" id="fileId" accept="image/*" onchange="handleImageUpload()">
+    <textarea id="imageText" rows="5" cols="50" placeholder="Compressed Base64 string will appear here..." oninput="handleTextInput()"></textarea>
+    <br><br>
+
+    <h3>Base64 to Image</h3>
+    <label for="scale">Scale (e.g., 0.5 for half size): </label>
+    <input type="number" id="scale" step="0.1" value="1">
+    <button onclick="displayImage()">Display Image</button>
+    <div id="main"></div>
+
+    <script>
+        let base64String = ""; // Original Base64 string
+        let compressedString = ""; // Fully compressed Base64 string
+
+        // Handle image upload
+        function handleImageUpload() {
+            const file = document.querySelector('#fileId').files[0];
+            if (!file) {
+                alert("Please select an image file.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function () {
+                base64String = reader.result.split(",")[1]; // Extract Base64 string
+                compressedString = applyAllCompression(base64String); // Apply all compression
+                document.getElementById("imageText").value = compressedString;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Handle text input and decompress automatically
+        function handleTextInput() {
+            const inputText = document.getElementById("imageText").value.trim();
+            if (!inputText) {
+                base64String = "";
+                compressedString = "";
+                return;
+            }
+
+            try {
+                base64String = reverseAllCompression(inputText); // Decompress fully
+            } catch (error) {
+                alert("Invalid compressed string. Please ensure the input is correct.");
+            }
+        }
+
+        // Display image from Base64
+        function displayImage() {
+            if (!base64String) {
+                alert("No valid Base64 string available. Please upload an image or provide a valid input.");
+                return;
+            }
+
+            const scale = parseFloat(document.getElementById("scale").value) || 1;
+            const base64img = `data:image/png;base64,${base64String}`;
+            const img = new Image();
+            img.src = base64img;
+            img.onload = function () {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                document.getElementById("main").innerHTML = ""; // Clear previous images
+                document.getElementById("main").appendChild(canvas);
+            };
+        }
+
+        // Compression and Decompression Functions
+        function compressRLE(text) {
+            return text.replace(/(.)\1+/g, (match, chr) => match.length + chr);
+        }
+
+        function decompressRLE(text) {
+            return text.replace(/(\d+)(.)/g, (_, count, chr) => chr.repeat(Number(count)));
+        }
+
+        function compressPattern(text) {
+            return text.replace(/A==/g, "1").replace(/\//g, "2").replace(/\+/g, "3");
+        }
+
+        function decompressPattern(text) {
+            return text.replace(/1/g, "A==").replace(/2/g, "/").replace(/3/g, "+");
+        }
+
+        // Apply all compression algorithms sequentially
+        function applyAllCompression(text) {
+            let compressed = compressRLE(text);
+            compressed = compressPattern(compressed);
+            return compressed;
+        }
+
+        // Reverse all compression algorithms sequentially
+        function reverseAllCompression(text) {
+            let decompressed = decompressPattern(text);
+            decompressed = decompressRLE(decompressed);
+            return decompressed;
+        }
+    </script>
+</body>
+</html>

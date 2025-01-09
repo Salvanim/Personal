@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to Binary with RLE Compression (Color + Transparency)</title>
+    <style>
+        img {
+            max-width: 100%;
+            height: auto;
+            margin-top: 20px;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image to Binary with RLE Compression (Color + Transparency)</h1>
+    <input type="file" id="imageInput" accept="image/*">
+    <div id="originalImageContainer">
+        <h3>Original Image:</h3>
+        <img id="originalImage" src="" alt="Original Image" style="display:none;">
+    </div>
+    <div>
+        <h3>Compressed RLE String:</h3>
+        <pre id="compressedOutput"></pre>
+    </div>
+    <div>
+        <h3>Decompressed Image:</h3>
+        <canvas id="decompressedCanvas" style="display:none;"></canvas>
+    </div>
+
+    <script>
+        var colorDictionary = {};  // To store the mapping between color and character
+        var reverseDictionary = {};  // To reverse map back from character to color
+
+        document.getElementById('imageInput').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const imgElement = document.getElementById('originalImage');
+                    imgElement.src = event.target.result;
+                    imgElement.style.display = 'block';
+                    imgElement.onload = function() {
+                        const compressed = imageToBinaryWithRLE(imgElement);
+                        document.getElementById('compressedOutput').textContent = compressed;
+                        const decompressedImage = reverseRLEAndConvertToImage(compressed);
+                        displayDecompressedImage(decompressedImage, imgElement.width, imgElement.height);
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        function imageToBinaryWithRLE(image) {
+            const binaryString = imageToBinary(image);
+            let transformedString = replaceColorsWithCharacters(binaryString);
+            return runLengthEncode(transformedString);
+        }
+
+        function imageToBinary(image) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = image.width;
+            canvas.height = image.height;
+            ctx.drawImage(image, 0, 0);
+
+            let binaryString = '';
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            // Loop through the pixels (RGBA values) in the imageData
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                const r = imageData.data[i];      // Red channel
+                const g = imageData.data[i + 1];  // Green channel
+                const b = imageData.data[i + 2];  // Blue channel
+                const a = imageData.data[i + 3];  // Alpha channel
+
+                // Add the RGBA value as a string to binary string
+                binaryString += r + ',' + g + ',' + b + ',' + a + ';';  // Separate each pixel with a semicolon
+            }
+
+            return binaryString;
+        }
+
+        function replaceColorsWithCharacters(binaryString) {
+            let transformedString = '';
+            const pixels = binaryString.split(';').filter(pixel => pixel.length > 0);
+            
+            // Replace each unique color with a character
+            for (let pixel of pixels) {
+                const [r, g, b, a] = pixel.split(',').map(Number);
+                const colorKey = `${r},${g},${b},${a}`;
+                
+                // If the color hasn't been seen before, assign a unique character
+                if (!(colorKey in colorDictionary)) {
+                    const char = String.fromCharCode(Object.keys(colorDictionary).length + 65); // A, B, C, ...
+                    colorDictionary[colorKey] = char;
+                    reverseDictionary[char] = { r, g, b, a };
+                }
+                
+                transformedString += colorDictionary[colorKey];
+            }
+            return transformedString;
+        }
+
+        function runLengthEncode(inputString) {
+            let encoded = '';
+            let count = 1;
+            for (let i = 1; i < inputString.length; i++) {
+                if (inputString[i] === inputString[i - 1]) {
+                    count++;
+                } else {
+                    encoded += count + inputString[i - 1];
+                    count = 1;
+                }
+            }
+            encoded += count + inputString[inputString.length - 1];
+            return encoded;
+        }
+
+        function reverseRLEAndConvertToImage(compressedString) {
+            const decodedString = reverseRunLengthEncode(compressedString);
+            return decodedString;
+        }
+
+        function reverseRunLengthEncode(encodedString) {
+            let decodedString = '';
+            let i = 0;
+            while (i < encodedString.length) {
+                let count = '';
+                while (i < encodedString.length && !isNaN(encodedString[i])) {
+                    count += encodedString[i];
+                    i++;
+                }
+                const char = encodedString[i];
+                decodedString += char.repeat(parseInt(count));
+                i++;
+            }
+            return decodedString;
+        }
+
+        function displayDecompressedImage(binaryString, width, height) {
+            const canvas = document.getElementById('decompressedCanvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.createImageData(width, height);
+
+            let pixelIndex = 0;
+            for (let i = 0; i < binaryString.length; i++) {
+                const char = binaryString[i];
+                const { r, g, b, a } = reverseDictionary[char];
+
+                // Set the pixel's RGBA values
+                imageData.data[pixelIndex * 4] = r;      // Red
+                imageData.data[pixelIndex * 4 + 1] = g;  // Green
+                imageData.data[pixelIndex * 4 + 2] = b;  // Blue
+                imageData.data[pixelIndex * 4 + 3] = a;  // Alpha (preserving transparency)
+
+                pixelIndex++;
+            }
+
+            // Put the imageData onto the canvas
+            ctx.putImageData(imageData, 0, 0);
+            canvas.style.display = 'block';  // Show the decompressed image
+        }
+    </script>
+</body>
+</html>
